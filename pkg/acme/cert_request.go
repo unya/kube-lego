@@ -3,6 +3,7 @@ package acme
 import (
 	"errors"
 	"fmt"
+	"github.com/jetstack/kube-lego/pkg/kubelego_const"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -14,32 +15,24 @@ import (
 	"time"
 )
 
-func (a *Acme) client() (*acme.Client, error) {
-	if a.acmeClient != nil {
-		return a.acmeClient, nil
-	}
+func (a *Acme) newAcmeClient() (*acme.Client, error) {
 
-	a.Log().Infof("initialize lego acme connection")
-
+	// get existing user or create new one
 	err := a.getUser()
 	if err != nil {
 		err := a.createUser()
 		if err != nil {
 			return nil, err
 		}
+	} else {
+		// validate if account URL and private Key is valid
+		err := a.validateUser()
+		if err != nil {
+			a.Log().Fatalf("Error verifying existing user: %s", err)
+		}
 	}
 
-	acmeClient, err := acme.NewClient(a.kubelego.LegoURL(), a, kubelego.AcmeKeyType)
-	if err != nil {
-		return nil, err
-	}
-	a.acmeClient = acmeClient
-
-	a.acmeClient.ExcludeChallenges([]acme.Challenge{acme.TLSSNI01, acme.DNS01})
-
-	a.acmeClient.SetChallengeProvider(acme.HTTP01, a)
-
-	return a.acmeClient, nil
+	return nil, nil
 }
 
 func (a *Acme) testReachabliltyHost(host string) error {
@@ -88,11 +81,11 @@ func (a *Acme) ObtainCertificate(domains []string) (data map[string][]byte, err 
 
 	op := func() error {
 		data, err = a.obtainCertificate(domains)
-		
+
 		if err != nil {
 			a.Log().Warn("Error while obtaining certificate: ", err)
 		}
-		
+
 		return err
 	}
 

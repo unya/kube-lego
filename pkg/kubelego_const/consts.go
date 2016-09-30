@@ -7,6 +7,7 @@ import (
 
 const RsaKeySize = 2048
 const AcmeRegistration = "acme-registration.json"
+const AcmeRegistrationUrl = "acme-registration-url"
 const AcmePrivateKey = k8sApi.TLSPrivateKeyKey
 const AcmeKeyType = acme.RSA2048
 const AcmeHttpChallengePath = "/.well-known/acme-challenge"

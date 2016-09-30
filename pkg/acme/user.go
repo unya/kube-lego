@@ -1,7 +1,6 @@
 package acme
 
 import (
-	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -11,19 +10,19 @@ import (
 
 	"github.com/jetstack/kube-lego/pkg/kubelego_const"
 
-	"github.com/xenolf/lego/acme"
+	"golang.org/x/crypto/acme"
+	"golang.org/x/net/context"
 )
 
-func (a *Acme) GetEmail() string {
-	return a.kubelego.LegoEmail()
+func (a *Acme) getContact() []string {
+	return []string{
+		fmt.Sprintf("mailto:%s", a.kubelego.LegoEmail()),
+	}
 }
 
-func (a *Acme) GetRegistration() *acme.RegistrationResource {
-	return a.registration
-}
-
-func (a *Acme) GetPrivateKey() crypto.PrivateKey {
-	return a.privateKey
+func (a *Acme) acceptTos(tos string) bool {
+	a.Log().Infof("If you don't accept the TOS (%s) please exit the program now", tos)
+	return true
 }
 
 func (a *Acme) createUser() error {
@@ -31,34 +30,33 @@ func (a *Acme) createUser() error {
 	if err != nil {
 		return err
 	}
-	a.privateKey = privateKey
 
-	legoClient, err := acme.NewClient(a.kubelego.LegoURL(), a, kubelego.AcmeKeyType)
+	a.acmeClient = &acme.Client{
+		Key:          privateKey,
+		DirectoryURL: a.kubelego.LegoURL(),
+	}
+
+	account := &acme.Account{
+		Contact: a.getContact(),
+	}
+
+	account, err = a.acmeClient.Register(
+		context.Background(),
+		account,
+		a.acceptTos,
+	)
 	if err != nil {
 		return err
 	}
+	a.Log().Infof("Created an ACME account (registration url: %s)", account.URI)
 
-	reg, err := legoClient.Register()
-	if err != nil {
-		return err
-	}
-	a.registration = reg
-
-	err = legoClient.AgreeToTOS()
-	if err != nil {
-		return err
-	}
-
-	// persistence of user
-	regJson, err := json.Marshal(*reg)
-	if err != nil {
-		return err
-	}
+	a.acmeAccountURI = account.URI
+	a.acmeAccount = account
 
 	return a.kubelego.SaveAcmeUser(
 		map[string][]byte{
-			kubelego.AcmePrivateKey:   privateKeyPem,
-			kubelego.AcmeRegistration: regJson,
+			kubelego.AcmePrivateKey:      privateKeyPem,
+			kubelego.AcmeRegistrationUrl: []byte(account.URI),
 		},
 	)
 }
@@ -79,20 +77,32 @@ func (a *Acme) getUser() error {
 	if err != nil {
 		return err
 	}
+	a.acmeClient = &acme.Client{
+		Key:          privateKey,
+		DirectoryURL: a.kubelego.LegoURL(),
+	}
+
+	acmeAccountURIBytes, ok := userData[kubelego.AcmeRegistrationUrl]
+	if ok {
+		return nil
+	}
+	a.acmeAccountURI = string(acmeAccountURIBytes)
 
 	regData, ok := userData[kubelego.AcmeRegistration]
 	if !ok {
-		return fmt.Errorf("Could not find acme registration with key '%s'", kubelego.AcmeRegistration)
+		return fmt.Errorf("Could not find an ACME account URI in the account secret")
 	}
-	reg := acme.RegistrationResource{}
+	reg := acmeAccountRegistration{}
 	err = json.Unmarshal(regData, &reg)
 	if err != nil {
 		return err
 	}
+	a.acmeAccountURI = reg.URI
 
-	a.registration = &reg
-	a.privateKey = privateKey
+	return nil
+}
 
+func (a *Acme) validateUser() error {
 	return nil
 }
 
