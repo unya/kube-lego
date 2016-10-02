@@ -16,6 +16,7 @@ import (
 	"github.com/jetstack/kube-lego/pkg/provider/gce"
 	"github.com/jetstack/kube-lego/pkg/provider/nginx"
 	"github.com/jetstack/kube-lego/pkg/secret"
+	"github.com/unya/kube-lego/pkg/provider/traefik"
 
 	log "github.com/Sirupsen/logrus"
 	k8sApi "k8s.io/kubernetes/pkg/api"
@@ -73,8 +74,9 @@ func (kl *KubeLego) Init() {
 
 	// initialising ingress providers
 	kl.legoIngressProvider = map[string]kubelego.IngressProvider{
-		"gce":   gce.New(kl),
-		"nginx": nginx.New(kl),
+		"gce":     gce.New(kl),
+		"nginx":   nginx.New(kl),
+		"traefik": traefik.New(kl),
 	}
 
 	// start workers
@@ -161,6 +163,9 @@ func (kl *KubeLego) LegoServiceNameNginx() string {
 func (kl *KubeLego) LegoServiceNameGce() string {
 	return kl.legoServiceNameGce
 }
+func (kl *KubeLego) LegoServiceNameTraefik() string {
+	return kl.legoServiceNameTraefik
+}
 
 func (kl *KubeLego) LegoMinimumValidity() time.Duration {
 	return kl.legoMinimumValidity
@@ -231,6 +236,11 @@ func (kl *KubeLego) paramsLego() error {
 	kl.legoServiceNameGce = os.Getenv("LEGO_SERVICE_NAME_GCE")
 	if len(kl.legoServiceNameGce) == 0 {
 		kl.legoServiceNameGce = "kube-lego-gce"
+	}
+
+	kl.legoServiceNameTraefik = os.Getenv("LEGO_SERVICE_NAME_TRAEFIK")
+	if len(kl.legoServiceNameGce) == 0 {
+		kl.legoServiceNameGce = "kube-lego-traefik"
 	}
 
 	legoDefaultIngressClass := os.Getenv("LEGO_DEFAULT_INGRESS_CLASS")
